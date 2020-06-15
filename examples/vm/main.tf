@@ -40,12 +40,17 @@ resource "ovirt_vm" "my_vm_1" {
   #       update the bootable disk of VM (the disk that copied from the template).
   #   3. If the template specified by `template_id` has no disks attached,
   #      `block_device` must be assigned with 'disk_id'. This will attach a new disk.
+  #   4. If will be configured alias and storage_domain terraform provider will define 
+  #      alias for all disks, except bootable disk. Alias will be in format: vmname_Disk2,
+  #      vmname_Disk3
 
   template_id = "${var.template_id}"
   block_device {
     disk_id   = "${ovirt_disk.my_disk_1.id}"  // optional
     interface = "virtio"
     size      = 120   // size in GiB - in case disk_id is not passed, this would extend the disk.
+    alias          = "my_vm_1" // optional. human friendly disk name on the disks list.
+    storage_domain = "lun-5TB" // optional. define storage domain where will be created disks for VM. Applied only for deploy VM from Template. disk_id shoud be removed.
   }
 }
 
