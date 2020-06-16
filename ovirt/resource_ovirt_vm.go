@@ -398,13 +398,24 @@ func resourceOvirtVMCreate(d *schema.ResourceData, meta interface{}) error {
 			return fmt.Errorf("Failed to get Template disks attachments: %v", err)
 		}
 
-		if sdSlice, ok := sdsResp.StorageDomains(); ok {
-			sd := sdSlice.Slice()[0]
+		if storageDomains, ok := sdsResp.StorageDomains(); ok {
+			sd := storageDomains.Slice()[0]
 
 			for i, v := range tds {
 				diskIndex := i + 1
 				disk := v.MustDisk()
 				disk.SetStorageDomain(sd)
+
+				diskattachment := ovirtsdk4.NewDiskAttachmentBuilder().
+					Disk(ovirtsdk4.NewDiskBuilder().
+						Id(disk.MustId()).
+						Format(ovirtsdk4.DISKFORMAT_COW).
+						StorageDomainsOfAny(
+							ovirtsdk4.NewStorageDomainBuilder().
+								Id(sd.MustId()).
+								MustBuild()).
+						MustBuild()).
+					MustBuild()
 
 				// Define basic disk aliases only if attribute alias defined
 				if alias, _ := blockDevice.([]interface{})[0].(map[string]interface{})["alias"]; alias != "" {
@@ -415,34 +426,11 @@ func resourceOvirtVMCreate(d *schema.ResourceData, meta interface{}) error {
 					case false:
 						disk.SetAlias(fmt.Sprintf("%s_Disk%v", d.Get("name").(string), diskIndex))
 					}
-					diskattachment := ovirtsdk4.NewDiskAttachmentBuilder().
-						Disk(ovirtsdk4.NewDiskBuilder().
-							Id(disk.MustId()).
-							Format(ovirtsdk4.DISKFORMAT_COW).
-							Alias(disk.MustAlias()).
-							StorageDomainsOfAny(
-								ovirtsdk4.NewStorageDomainBuilder().
-									Id(sd.MustId()).
-									MustBuild()).
-							MustBuild()).
-						MustBuild()
 
-					vmBuilder.DiskAttachmentsOfAny(diskattachment)
-
-				} else {
-					diskattachment := ovirtsdk4.NewDiskAttachmentBuilder().
-						Disk(ovirtsdk4.NewDiskBuilder().
-							Id(disk.MustId()).
-							Format(ovirtsdk4.DISKFORMAT_COW).
-							StorageDomainsOfAny(
-								ovirtsdk4.NewStorageDomainBuilder().
-									Id(sd.MustId()).
-									MustBuild()).
-							MustBuild()).
-						MustBuild()
-
-					vmBuilder.DiskAttachmentsOfAny(diskattachment)
+					var newdiskattachment = diskattachment.MustDisk()
+					newdiskattachment.SetAlias(disk.MustAlias())
 				}
+				vmBuilder.DiskAttachmentsOfAny(diskattachment)
 			}
 		}
 	}
