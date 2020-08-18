@@ -180,7 +180,7 @@ func resourceOvirtVM() *schema.Resource {
 							Type:     schema.TypeString,
 							Optional: true,
 							ForceNew: false,
-							Default:  "",
+							Computed: true,
 						},
 						"logical_name": {
 							Type:     schema.TypeString,
@@ -1223,6 +1223,16 @@ func flattenOvirtVMDiskAttachments(configured []*ovirtsdk4.DiskAttachment, meta 
 			disk := diskService.Get().MustSend().MustDisk()
 			if size, ok := disk.ProvisionedSize(); ok {
 				attrs["size"] = int64(size) / int64(math.Pow(2, 30))
+			}
+			if storageDomains, ok :=disk.StorageDomains(); ok {
+				domainId := storageDomains.Slice()[0].MustId()
+				storageDomain := conn.SystemService().
+							StorageDomainsService().
+							StorageDomainService(domainId).
+							Get().
+							MustSend().
+							MustStorageDomain()
+				attrs["storage_domain"] = storageDomain.MustName()
 			}
 		}
 		diskAttachments[i] = attrs
