@@ -382,55 +382,57 @@ func resourceOvirtVMCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 	vmBuilder.Cpu(cpu)
 
-	if storage_domain, _ := blockDevice.([]interface{})[0].(map[string]interface{})["storage_domain"]; storage_domain != "" && templateIDOK {
+	if blockDeviceOk {
+		if storage_domain, _ := blockDevice.([]interface{})[0].(map[string]interface{})["storage_domain"]; storage_domain != "" && templateIDOK {
 
-		// Get the reference to the service that manages the storage domains
-		sdsService := conn.SystemService().StorageDomainsService()
+			// Get the reference to the service that manages the storage domains
+			sdsService := conn.SystemService().StorageDomainsService()
 
-		// Find the storage domain we want to be used for virtual machine disks
-		sdsResp, err := sdsService.List().Search("name=" + storage_domain.(string)).Send()
-		if err != nil {
-			return fmt.Errorf("Failed to search storage domains, reason: %v", err)
-		}
+			// Find the storage domain we want to be used for virtual machine disks
+			sdsResp, err := sdsService.List().Search("name=" + storage_domain.(string)).Send()
+			if err != nil {
+				return fmt.Errorf("Failed to search storage domains, reason: %v", err)
+			}
 
-		tds, err := getTemplateDiskAttachments(templateID.(string), meta)
-		if err != nil {
-			return fmt.Errorf("Failed to get Template disks attachments: %v", err)
-		}
+			tds, err := getTemplateDiskAttachments(templateID.(string), meta)
+			if err != nil {
+				return fmt.Errorf("Failed to get Template disks attachments: %v", err)
+			}
 
-		if storageDomains, ok := sdsResp.StorageDomains(); ok {
-			sd := storageDomains.Slice()[0]
+			if storageDomains, ok := sdsResp.StorageDomains(); ok {
+				sd := storageDomains.Slice()[0]
 
-			for i, v := range tds {
-				diskIndex := i + 1
-				disk := v.MustDisk()
-				disk.SetStorageDomain(sd)
+				for i, v := range tds {
+					diskIndex := i + 1
+					disk := v.MustDisk()
+					disk.SetStorageDomain(sd)
 
-				diskattachment := ovirtsdk4.NewDiskAttachmentBuilder().
-					Disk(ovirtsdk4.NewDiskBuilder().
-						Id(disk.MustId()).
-						Format(ovirtsdk4.DISKFORMAT_COW).
-						StorageDomainsOfAny(
-							ovirtsdk4.NewStorageDomainBuilder().
-								Id(sd.MustId()).
-								MustBuild()).
-						MustBuild()).
-					MustBuild()
+					diskattachment := ovirtsdk4.NewDiskAttachmentBuilder().
+						Disk(ovirtsdk4.NewDiskBuilder().
+							Id(disk.MustId()).
+							Format(ovirtsdk4.DISKFORMAT_COW).
+							StorageDomainsOfAny(
+								ovirtsdk4.NewStorageDomainBuilder().
+									Id(sd.MustId()).
+									MustBuild()).
+							MustBuild()).
+						MustBuild()
 
-				// Define basic disk aliases only if attribute alias defined
-				if alias, _ := blockDevice.([]interface{})[0].(map[string]interface{})["alias"]; alias != "" {
-					_, diskBotable := disk.Bootable()
-					switch diskBotable {
-					case true:
-						disk.SetAlias(alias.(string))
-					case false:
-						disk.SetAlias(fmt.Sprintf("%s_Disk%v", d.Get("name").(string), diskIndex))
+					// Define basic disk aliases only if attribute alias defined
+					if alias, _ := blockDevice.([]interface{})[0].(map[string]interface{})["alias"]; alias != "" {
+						_, diskBotable := disk.Bootable()
+						switch diskBotable {
+						case true:
+							disk.SetAlias(alias.(string))
+						case false:
+							disk.SetAlias(fmt.Sprintf("%s_Disk%v", d.Get("name").(string), diskIndex))
+						}
+
+						var newdiskattachment = diskattachment.MustDisk()
+						newdiskattachment.SetAlias(disk.MustAlias())
 					}
-
-					var newdiskattachment = diskattachment.MustDisk()
-					newdiskattachment.SetAlias(disk.MustAlias())
+					vmBuilder.DiskAttachmentsOfAny(diskattachment)
 				}
-				vmBuilder.DiskAttachmentsOfAny(diskattachment)
 			}
 		}
 	}

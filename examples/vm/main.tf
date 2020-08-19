@@ -50,7 +50,9 @@ resource "ovirt_vm" "my_vm_1" {
     interface = "virtio"
     size      = 120   // size in GiB - in case disk_id is not passed, this would extend the disk.
     alias          = "my_vm_1" // optional. human friendly disk name on the disks list.
-    storage_domain = "lun-5TB" // optional. define storage domain where will be created disks for VM. Applied only for deploy VM from Template. disk_id shoud be removed.
+    storage_domain = "lun-5TB" // optional. define storage domain where will be created disks for VM. 
+                               // Applied only for deploy VM from Template. disk_id shoud be removed.
+                               // Please note! Disk on destination storage domain will be in COW format.
   }
 }
 
