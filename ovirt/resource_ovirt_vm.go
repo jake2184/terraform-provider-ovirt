@@ -1137,6 +1137,42 @@ func ovirtAttachDisks(s []interface{}, vmID string, meta interface{}) error {
 			return err
 		}
 
+		// Migrate storage domain if needed
+		if name, ok := blockDeviceElement["storage_domain"].(string); name != "" && ok {
+			sdsService := conn.SystemService().StorageDomainsService()
+			sdsResp, err := sdsService.List().Search("name=" + name).Send()
+			if err != nil {
+				return fmt.Errorf("failed to search storage domains, reason: %v", err)
+			}
+			if targetStorageDomains, ok := sdsResp.StorageDomains(); ok {
+				if len(targetStorageDomains.Slice()) == 0 {
+					return fmt.Errorf("failed to find a storage domain with name=%s", name)
+				}
+
+				targetSd := targetStorageDomains.Slice()[0]
+				if currentStorageDomains, ok := disk.StorageDomains(); ok {
+					currentSd := currentStorageDomains.Slice()[0]
+					currentSdName := conn.SystemService().
+						StorageDomainsService().
+						StorageDomainService(currentSd.MustId()).
+						Get().
+						MustSend().
+						MustStorageDomain().
+						MustName()
+
+					if currentSdName != name {
+						log.Printf("Moving disk from '%s' to '%s'", currentSdName, targetSd.MustName())
+						if _, err := diskService.Move().StorageDomain(targetSd).Send(); err != nil {
+							return err
+						}
+						if err := conn.WaitForDisk(disk.MustId(), ovirtsdk4.DISKSTATUS_OK, 20*time.Minute); err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+
 		da, err := expandOvirtVMDiskAttachment(v, disk)
 		if err != nil {
 			return err
@@ -1226,14 +1262,14 @@ func flattenOvirtVMDiskAttachments(configured []*ovirtsdk4.DiskAttachment, meta 
 			if size, ok := disk.ProvisionedSize(); ok {
 				attrs["size"] = int64(size) / int64(math.Pow(2, 30))
 			}
-			if storageDomains, ok :=disk.StorageDomains(); ok {
+			if storageDomains, ok := disk.StorageDomains(); ok {
 				domainId := storageDomains.Slice()[0].MustId()
 				storageDomain := conn.SystemService().
-							StorageDomainsService().
-							StorageDomainService(domainId).
-							Get().
-							MustSend().
-							MustStorageDomain()
+					StorageDomainsService().
+					StorageDomainService(domainId).
+					Get().
+					MustSend().
+					MustStorageDomain()
 				attrs["storage_domain"] = storageDomain.MustName()
 			}
 		}
