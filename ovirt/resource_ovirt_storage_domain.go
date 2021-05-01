@@ -39,7 +39,7 @@ func resourceOvirtStorageDomain() *schema.Resource {
 			"host_id": {
 				Type:        schema.TypeString,
 				Required:    true,
-				ForceNew:    true,
+				ForceNew:    false,
 				Description: "Host ID to be used to mount storage, this is not maintained by terraform",
 			},
 			"datacenter_id": {
